@@ -17,6 +17,8 @@ def get_parser_with_args(metadata_json='metadata.json'):
         parser.add_argument('--log_dir', type=str, dest='log_dir', help='tensorboard log directory')
         parser.add_argument('--amp', action='store_true', dest='amp', help='enable CUDA automatic mixed precision')
         parser.add_argument('--no-amp', action='store_false', dest='amp', help='disable CUDA automatic mixed precision')
+        parser.add_argument('--resume', type=str, default='', dest='resume', help='path to checkpoint for resuming training')
+        parser.add_argument('--checkpoint_dir', type=str, default='./tmp', dest='checkpoint_dir', help='directory for training checkpoints')
 
         return parser, metadata
 

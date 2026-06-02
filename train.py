@@ -101,8 +101,42 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=8, gamma=0.5)
 best_metrics = {'cd_f1scores': -1, 'cd_recalls': -1, 'cd_precisions': -1}
 logging.info('STARTING training')
 total_step = -1
+start_epoch = 0
+checkpoint_dir = opt.checkpoint_dir
+os.makedirs(checkpoint_dir, exist_ok=True)
 
-for epoch in range(opt.epochs):
+if opt.resume:
+    logging.info('LOADING checkpoint from ' + opt.resume)
+    checkpoint = torch.load(opt.resume, map_location=dev)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        if 'scaler_state_dict' in checkpoint:
+            scaler.load_state_dict(checkpoint['scaler_state_dict'])
+        best_metrics = checkpoint.get('best_metrics', best_metrics)
+        total_step = checkpoint.get('total_step', total_step)
+        start_epoch = checkpoint.get('epoch', -1) + 1
+        logging.info('RESUMING from epoch ' + str(start_epoch))
+    else:
+        model = checkpoint.to(dev)
+        logging.warning('Loaded legacy model checkpoint. Optimizer and scheduler states were not restored.')
+
+def save_training_checkpoint(path, epoch, mean_val_metrics):
+    checkpoint = {
+        'epoch': epoch,
+        'total_step': total_step,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'scaler_state_dict': scaler.state_dict(),
+        'best_metrics': best_metrics,
+        'validation_metrics': mean_val_metrics,
+        'metadata': metadata,
+    }
+    torch.save(checkpoint, path)
+
+for epoch in range(start_epoch, opt.epochs):
     train_metrics = initialize_metrics()
     val_metrics = initialize_metrics()
 
@@ -212,6 +246,8 @@ for epoch in range(opt.epochs):
             del batch_img1, batch_img2, labels
 
         logging.info("EPOCH {} VALIDATION METRICS".format(epoch)+str(mean_val_metrics))
+        metadata['validation_metrics'] = mean_val_metrics
+        last_checkpoint_path = os.path.join(checkpoint_dir, 'last_checkpoint.pt')
 
         """
         Store the weights of good epochs based on validation results
@@ -224,18 +260,18 @@ for epoch in range(opt.epochs):
 
             # Insert training and epoch information to metadata dictionary
             logging.info('updata the model')
-            metadata['validation_metrics'] = mean_val_metrics
 
             # Save model and log
-            if not os.path.exists('./tmp'):
-                os.mkdir('./tmp')
-            with open('./tmp/metadata_epoch_' + str(epoch) + '.json', 'w') as fout:
+            with open(os.path.join(checkpoint_dir, 'metadata_epoch_' + str(epoch) + '.json'), 'w') as fout:
                 json.dump(metadata, fout)
 
-            torch.save(model, './tmp/checkpoint_epoch_'+str(epoch)+'.pt')
+            best_metrics = mean_val_metrics
+            save_training_checkpoint(os.path.join(checkpoint_dir, 'checkpoint_epoch_' + str(epoch) + '.pt'), epoch, mean_val_metrics)
+            save_training_checkpoint(os.path.join(checkpoint_dir, 'best_checkpoint.pt'), epoch, mean_val_metrics)
 
             # comet.log_asset(upload_metadata_file_path)
-            best_metrics = mean_val_metrics
+
+        save_training_checkpoint(last_checkpoint_path, epoch, mean_val_metrics)
 
 
         print('An epoch finished.')
