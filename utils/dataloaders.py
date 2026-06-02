@@ -8,29 +8,31 @@ from utils import transforms as tr
 Load all training and validation data paths
 '''
 def full_path_loader(data_dir):
-    train_data = [i for i in os.listdir(data_dir + 'train/A/') if not
+    train_a_dir = os.path.join(data_dir, 'train', 'A')
+    val_a_dir = os.path.join(data_dir, 'val', 'A')
+    train_data = [i for i in os.listdir(train_a_dir) if not
     i.startswith('.')]
     train_data.sort()
 
-    valid_data = [i for i in os.listdir(data_dir + 'val/A/') if not
+    valid_data = [i for i in os.listdir(val_a_dir) if not
     i.startswith('.')]
     valid_data.sort()
 
     train_label_paths = []
     val_label_paths = []
     for img in train_data:
-        train_label_paths.append(data_dir + 'train/label/' + img)
+        train_label_paths.append(os.path.join(data_dir, 'train', 'label', img))
     for img in valid_data:
-        val_label_paths.append(data_dir + 'val/label/' + img)
+        val_label_paths.append(os.path.join(data_dir, 'val', 'label', img))
 
 
     train_data_path = []
     val_data_path = []
 
     for img in train_data:
-        train_data_path.append([data_dir + 'train/', img])
+        train_data_path.append([os.path.join(data_dir, 'train'), img])
     for img in valid_data:
-        val_data_path.append([data_dir + 'val/', img])
+        val_data_path.append([os.path.join(data_dir, 'val'), img])
 
     train_dataset = {}
     val_dataset = {}
@@ -49,17 +51,18 @@ Load all testing data paths
 '''
 def full_test_loader(data_dir):
 
-    test_data = [i for i in os.listdir(data_dir + 'test/A/') if not
+    test_a_dir = os.path.join(data_dir, 'test', 'A')
+    test_data = [i for i in os.listdir(test_a_dir) if not
                     i.startswith('.')]
     test_data.sort()
 
     test_label_paths = []
     for img in test_data:
-        test_label_paths.append(data_dir + 'test/label/' + img)
+        test_label_paths.append(os.path.join(data_dir, 'test', 'label', img))
 
     test_data_path = []
     for img in test_data:
-        test_data_path.append([data_dir + 'test/', img])
+        test_data_path.append([os.path.join(data_dir, 'test'), img])
 
     test_dataset = {}
     for cp in range(len(test_data)):
@@ -72,8 +75,8 @@ def cdd_loader(img_path, label_path, aug):
     dir = img_path[0]
     name = img_path[1]
 
-    img1 = Image.open(dir + 'A/' + name)
-    img2 = Image.open(dir + 'B/' + name)
+    img1 = Image.open(os.path.join(dir, 'A', name))
+    img2 = Image.open(os.path.join(dir, 'B', name))
     label = Image.open(label_path)
     sample = {'image': (img1, img2), 'label': label}
 
