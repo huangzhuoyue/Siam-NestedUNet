@@ -19,9 +19,9 @@ def full_path_loader(data_dir):
     train_label_paths = []
     val_label_paths = []
     for img in train_data:
-        train_label_paths.append(data_dir + 'train/OUT/' + img)
+        train_label_paths.append(data_dir + 'train/label/' + img)
     for img in valid_data:
-        val_label_paths.append(data_dir + 'val/OUT/' + img)
+        val_label_paths.append(data_dir + 'val/label/' + img)
 
 
     train_data_path = []
@@ -55,7 +55,7 @@ def full_test_loader(data_dir):
 
     test_label_paths = []
     for img in test_data:
-        test_label_paths.append(data_dir + 'test/OUT/' + img)
+        test_label_paths.append(data_dir + 'test/label/' + img)
 
     test_data_path = []
     for img in test_data:
