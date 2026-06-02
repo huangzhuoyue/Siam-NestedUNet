@@ -13,6 +13,10 @@ def get_parser_with_args(metadata_json='metadata.json'):
         parser.add_argument('--crop_size', type=int, dest='patch_size', help='crop size')
         parser.add_argument('--epochs', type=int, dest='epochs', help='number of epochs')
         parser.add_argument('--lr', type=float, dest='learning_rate', help='learning rate')
+        parser.add_argument('--dataset_dir', type=str, dest='dataset_dir', help='dataset root directory')
+        parser.add_argument('--log_dir', type=str, dest='log_dir', help='tensorboard log directory')
+        parser.add_argument('--amp', action='store_true', dest='amp', help='enable CUDA automatic mixed precision')
+        parser.add_argument('--no-amp', action='store_false', dest='amp', help='disable CUDA automatic mixed precision')
 
         return parser, metadata
 

@@ -3,7 +3,21 @@ import random
 import numpy as np
 
 from PIL import Image, ImageOps, ImageFilter
-import torchvision.transforms as transforms
+
+try:
+    import torchvision.transforms as transforms
+except ImportError:
+    class _Compose(object):
+        def __init__(self, transforms):
+            self.transforms = transforms
+
+        def __call__(self, sample):
+            for transform in self.transforms:
+                sample = transform(sample)
+            return sample
+
+    class transforms(object):
+        Compose = _Compose
 
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.

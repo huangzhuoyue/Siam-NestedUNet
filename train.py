@@ -8,10 +8,43 @@ from utils.helpers import (get_loaders, get_criterion,
 import os
 import logging
 import json
-from tensorboardX import SummaryWriter
-from tqdm import tqdm
 import random
 import numpy as np
+try:
+    from contextlib import nullcontext
+except ImportError:
+    class nullcontext(object):
+        def __enter__(self):
+            return None
+
+        def __exit__(self, *excinfo):
+            return False
+
+try:
+    from tensorboardX import SummaryWriter
+except ImportError:
+    class SummaryWriter(object):
+        def __init__(self, *args, **kwargs):
+            logging.warning('tensorboardX is not installed; TensorBoard logging is disabled.')
+
+        def add_scalars(self, *args, **kwargs):
+            pass
+
+        def close(self):
+            pass
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    class tqdm(object):
+        def __init__(self, iterable):
+            self.iterable = iterable
+
+        def __iter__(self):
+            return iter(self.iterable)
+
+        def set_description(self, *args, **kwargs):
+            pass
 
 
 """
@@ -32,6 +65,10 @@ Set up environment: define paths, download data, and set device
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 dev = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 logging.info('GPU AVAILABLE? ' + str(torch.cuda.is_available()))
+use_amp = bool(opt.amp and dev.type == 'cuda')
+scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+amp_context = torch.cuda.amp.autocast if use_amp else nullcontext
+logging.info('AMP ENABLED? ' + str(use_amp))
 
 def seed_torch(seed):
     random.seed(seed)
@@ -89,12 +126,13 @@ for epoch in range(opt.epochs):
         optimizer.zero_grad()
 
         # Get model predictions, calculate loss, backprop
-        cd_preds = model(batch_img1, batch_img2)
-
-        cd_loss = criterion(cd_preds, labels)
+        with amp_context():
+            cd_preds = model(batch_img1, batch_img2)
+            cd_loss = criterion(cd_preds, labels)
         loss = cd_loss
-        loss.backward()
-        optimizer.step()
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         cd_preds = cd_preds[-1]
         _, cd_preds = torch.max(cd_preds, 1)
@@ -140,9 +178,9 @@ for epoch in range(opt.epochs):
             labels = labels.long().to(dev)
 
             # Get predictions and calculate loss
-            cd_preds = model(batch_img1, batch_img2)
-
-            cd_loss = criterion(cd_preds, labels)
+            with amp_context():
+                cd_preds = model(batch_img1, batch_img2)
+                cd_loss = criterion(cd_preds, labels)
 
             cd_preds = cd_preds[-1]
             _, cd_preds = torch.max(cd_preds, 1)
