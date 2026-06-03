@@ -97,8 +97,8 @@ def get_loaders(opt):
     train_full_load, val_full_load = full_path_loader(opt.dataset_dir)
 
 
-    train_dataset = CDDloader(train_full_load, aug=opt.augmentation)
-    val_dataset = CDDloader(val_full_load, aug=False)
+    train_dataset = CDDloader(train_full_load, aug=opt.augmentation, cache_data=opt.cache_data)
+    val_dataset = CDDloader(val_full_load, aug=False, cache_data=opt.cache_data)
 
     logging.info('STARTING Dataloading')
 
@@ -121,7 +121,7 @@ def get_test_loaders(opt, batch_size=None):
 
     test_full_load = full_test_loader(opt.dataset_dir)
 
-    test_dataset = CDDloader(test_full_load, aug=False)
+    test_dataset = CDDloader(test_full_load, aug=False, cache_data=opt.cache_data)
 
     logging.info('STARTING Dataloading')
 

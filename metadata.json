@@ -9,6 +9,7 @@
   "batch_size": 16,
   "learning_rate": 1e-3,
   "loss_function": "hybrid",
+  "cache_data": true,
   "dataset_dir": "./dataset/",
   "weight_dir": "./outputs/",
   "log_dir": "./log/"

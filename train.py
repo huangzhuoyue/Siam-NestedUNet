@@ -1,10 +1,7 @@
 import datetime
 import torch
-from sklearn.metrics import precision_recall_fscore_support as prfs
 from utils.parser import get_parser_with_args
-from utils.helpers import (get_loaders, get_criterion,
-                           load_model, initialize_metrics, get_mean_metrics,
-                           set_metrics)
+from utils.helpers import get_loaders, get_criterion, load_model
 import os
 import logging
 import json
@@ -136,9 +133,54 @@ def save_training_checkpoint(path, epoch, mean_val_metrics):
     }
     torch.save(checkpoint, path)
 
+def initialize_epoch_stats(device):
+    return {
+        'loss_sum': torch.zeros((), device=device),
+        'corrects': torch.zeros((), device=device),
+        'total': torch.zeros((), device=device),
+        'tp': torch.zeros((), device=device),
+        'fp': torch.zeros((), device=device),
+        'fn': torch.zeros((), device=device),
+        'tn': torch.zeros((), device=device),
+        'num_batches': 0,
+    }
+
+def update_epoch_stats(stats, cd_loss, cd_preds, labels):
+    labels = labels.squeeze(1) if labels.dim() == 4 and labels.size(1) == 1 else labels
+    preds = cd_preds.squeeze(1) if cd_preds.dim() == 4 and cd_preds.size(1) == 1 else cd_preds
+    preds = preds.long()
+    labels = labels.long()
+
+    stats['loss_sum'] += cd_loss.detach()
+    stats['corrects'] += (preds == labels).sum()
+    stats['total'] += labels.numel()
+    stats['tp'] += ((preds == 1) & (labels == 1)).sum()
+    stats['fp'] += ((preds == 1) & (labels == 0)).sum()
+    stats['fn'] += ((preds == 0) & (labels == 1)).sum()
+    stats['tn'] += ((preds == 0) & (labels == 0)).sum()
+    stats['num_batches'] += 1
+
+def finalize_epoch_stats(stats, lr):
+    eps = 1e-7
+    num_batches = max(stats['num_batches'], 1)
+    loss = (stats['loss_sum'] / num_batches).item()
+    corrects = (100.0 * stats['corrects'] / (stats['total'] + eps)).item()
+    precision = (stats['tp'] / (stats['tp'] + stats['fp'] + eps)).item()
+    recall = (stats['tp'] / (stats['tp'] + stats['fn'] + eps)).item()
+    f1score = (2.0 * precision * recall / (precision + recall + eps))
+
+    return {
+        'cd_losses': loss,
+        'cd_corrects': corrects,
+        'cd_precisions': precision,
+        'cd_recalls': recall,
+        'cd_f1scores': f1score,
+        'learning_rate': lr,
+    }
+
 for epoch in range(start_epoch, opt.epochs):
-    train_metrics = initialize_metrics()
-    val_metrics = initialize_metrics()
+    train_metrics = initialize_epoch_stats(dev)
+    val_metrics = initialize_epoch_stats(dev)
 
     """
     Begin Training
@@ -171,34 +213,17 @@ for epoch in range(start_epoch, opt.epochs):
         cd_preds = cd_preds[-1]
         _, cd_preds = torch.max(cd_preds, 1)
 
-        # Calculate and log other batch metrics
-        cd_corrects = (100 *
-                       (cd_preds.squeeze().byte() == labels.squeeze().byte()).sum() /
-                       (labels.size()[0] * (opt.patch_size**2)))
-
-        cd_train_report = prfs(labels.data.cpu().numpy().flatten(),
-                               cd_preds.data.cpu().numpy().flatten(),
-                               average='binary',
-                               zero_division=0,
-                               pos_label=1)
-
-        train_metrics = set_metrics(train_metrics,
-                                    cd_loss,
-                                    cd_corrects,
-                                    cd_train_report,
-                                    scheduler.get_last_lr())
-
-        # log the batch mean metrics
-        mean_train_metrics = get_mean_metrics(train_metrics)
-
-        for k, v in mean_train_metrics.items():
-            writer.add_scalars(str(k), {'train': v}, total_step)
+        update_epoch_stats(train_metrics, cd_loss, cd_preds, labels)
 
         # clear batch variables from memory
         del batch_img1, batch_img2, labels
 
     scheduler.step()
+    mean_train_metrics = finalize_epoch_stats(train_metrics, scheduler.get_last_lr()[0])
     logging.info("EPOCH {} TRAIN METRICS".format(epoch) + str(mean_train_metrics))
+
+    for k, v in mean_train_metrics.items():
+        writer.add_scalars(str(k), {'train': v}, total_step)
 
     """
     Begin Validation
@@ -219,33 +244,17 @@ for epoch in range(start_epoch, opt.epochs):
             cd_preds = cd_preds[-1]
             _, cd_preds = torch.max(cd_preds, 1)
 
-            # Calculate and log other batch metrics
-            cd_corrects = (100 *
-                           (cd_preds.squeeze().byte() == labels.squeeze().byte()).sum() /
-                           (labels.size()[0] * (opt.patch_size**2)))
-
-            cd_val_report = prfs(labels.data.cpu().numpy().flatten(),
-                                 cd_preds.data.cpu().numpy().flatten(),
-                                 average='binary',
-                                 zero_division=0,
-                                 pos_label=1)
-
-            val_metrics = set_metrics(val_metrics,
-                                      cd_loss,
-                                      cd_corrects,
-                                      cd_val_report,
-                                      scheduler.get_last_lr())
-
-            # log the batch mean metrics
-            mean_val_metrics = get_mean_metrics(val_metrics)
-
-            for k, v in mean_train_metrics.items():
-                writer.add_scalars(str(k), {'val': v}, total_step)
+            update_epoch_stats(val_metrics, cd_loss, cd_preds, labels)
 
             # clear batch variables from memory
             del batch_img1, batch_img2, labels
 
+        mean_val_metrics = finalize_epoch_stats(val_metrics, scheduler.get_last_lr()[0])
         logging.info("EPOCH {} VALIDATION METRICS".format(epoch)+str(mean_val_metrics))
+
+        for k, v in mean_val_metrics.items():
+            writer.add_scalars(str(k), {'val': v}, total_step)
+
         metadata['validation_metrics'] = mean_val_metrics
         last_checkpoint_path = os.path.join(checkpoint_dir, 'last_checkpoint.pt')
 

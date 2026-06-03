@@ -19,6 +19,8 @@ def get_parser_with_args(metadata_json='metadata.json'):
         parser.add_argument('--no-amp', action='store_false', dest='amp', help='disable CUDA automatic mixed precision')
         parser.add_argument('--resume', type=str, default='', dest='resume', help='path to checkpoint for resuming training')
         parser.add_argument('--checkpoint_dir', type=str, default='./tmp', dest='checkpoint_dir', help='directory for training checkpoints')
+        parser.add_argument('--cache_data', action='store_true', default=ag.SUPPRESS, dest='cache_data', help='preload dataset images into RAM')
+        parser.add_argument('--no-cache_data', action='store_false', default=ag.SUPPRESS, dest='cache_data', help='disable dataset RAM cache')
 
         return parser, metadata
 

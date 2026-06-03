@@ -1,4 +1,5 @@
 import os
+import logging
 import torch.utils.data as data
 from PIL import Image
 from utils import transforms as tr
@@ -71,14 +72,31 @@ def full_test_loader(data_dir):
 
     return test_dataset
 
+def load_image(path):
+    with Image.open(path) as image:
+        return image.copy()
+
 def cdd_loader(img_path, label_path, aug):
     dir = img_path[0]
     name = img_path[1]
 
-    img1 = Image.open(os.path.join(dir, 'A', name))
-    img2 = Image.open(os.path.join(dir, 'B', name))
-    label = Image.open(label_path)
+    img1 = load_image(os.path.join(dir, 'A', name))
+    img2 = load_image(os.path.join(dir, 'B', name))
+    label = load_image(label_path)
     sample = {'image': (img1, img2), 'label': label}
+
+    if aug:
+        sample = tr.train_transforms(sample)
+    else:
+        sample = tr.test_transforms(sample)
+
+    return sample['image'][0], sample['image'][1], sample['label']
+
+def transform_sample(sample, aug):
+    sample = {
+        'image': (sample['image'][0].copy(), sample['image'][1].copy()),
+        'label': sample['label'].copy(),
+    }
 
     if aug:
         sample = tr.train_transforms(sample)
@@ -90,13 +108,34 @@ def cdd_loader(img_path, label_path, aug):
 
 class CDDloader(data.Dataset):
 
-    def __init__(self, full_load, aug=False):
+    def __init__(self, full_load, aug=False, cache_data=False):
 
         self.full_load = full_load
         self.loader = cdd_loader
         self.aug = aug
+        self.cache_data = cache_data
+        self.cached_samples = None
+
+        if self.cache_data:
+            logging.info('PRELOADING {} samples into RAM'.format(len(self.full_load)))
+            self.cached_samples = []
+            for index in range(len(self.full_load)):
+                img_path = self.full_load[index]['image']
+                label_path = self.full_load[index]['label']
+                dir = img_path[0]
+                name = img_path[1]
+                self.cached_samples.append({
+                    'image': (
+                        load_image(os.path.join(dir, 'A', name)),
+                        load_image(os.path.join(dir, 'B', name)),
+                    ),
+                    'label': load_image(label_path),
+                })
+            logging.info('FINISHED preloading {} samples into RAM'.format(len(self.cached_samples)))
 
     def __getitem__(self, index):
+        if self.cached_samples is not None:
+            return transform_sample(self.cached_samples[index], self.aug)
 
         img_path, label_path = self.full_load[index]['image'], self.full_load[index]['label']
 
