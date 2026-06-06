@@ -1,4 +1,5 @@
 import torch.utils.data
+from models.Models import SNUNet_ECAM
 from utils.parser import get_parser_with_args
 from utils.helpers import get_test_loaders
 from tqdm import tqdm
@@ -15,8 +16,15 @@ dev = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 test_loader = get_test_loaders(opt)
 
-path = 'weights/snunet-32.pt'   # the path of the model
-model = torch.load(path)
+model = SNUNet_ECAM(in_ch=3, out_ch=2)
+model = model.to(dev)
+
+path = 'models/checkpoint_epoch_83.pt'   # the path of the model
+checkpoint = torch.load(path, map_location=dev)
+if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+    model.load_state_dict(checkpoint['model_state_dict'])
+else:
+    model.load_state_dict(checkpoint)
 
 c_matrix = {'tn': 0, 'fp': 0, 'fn': 0, 'tp': 0}
 model.eval()
